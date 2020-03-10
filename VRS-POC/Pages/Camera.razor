@@ -1,0 +1,119 @@
+﻿@page "/camera";
+@using VRS_POC.Datastructs;
+@using VRS_POC.Services
+@inject NavigationManager NavigationManager
+@inject VisitorRegistration visitorRegistration
+@inject CameraImageService _camService
+@implements IDisposable
+@inject LoadingService loadingService
+@inject SenseTimeService sensetimeService
+
+<div class="camera-container">
+    <div>
+        <h3>Verify the information and Take Picture</h3>
+        <div class="img-container">
+            <img src="@cameraImgB64" />
+        </div>
+        <div>@faceText</div>
+        <div class="info-container">
+            <div class="row">
+                <div class="col">Name:</div>
+                <div class="col">@visitorRecord.Name</div>
+            </div>
+            <div class="row">
+                <div class="col">NRIC:</div>
+                <div class="col">@visitorRecord.Nric</div>
+            </div>
+            <div class="row">
+                <div class="col">Mobile Number:</div>
+                <div class="col">@visitorRecord.MobileNumber</div>
+            </div>
+            <div class="row">
+                <div class="col">Patient Name:</div>
+                <div class="col">@visitorRecord.PatientName</div>
+            </div>
+            <div class="row">
+                <div class="col">Floor Number:</div>
+                <div class="col">@visitorRecord.FloorNumber</div>
+            </div>
+        </div>
+        <div class="cta-panel pad-top">
+            <button @onclick='() => NavigationManager.NavigateTo("/details")' class="btn btn-secondary">Back</button>
+            <button class="btn btn-primary" @onclick="onConfirmClick">Confirm</button>
+        </div>
+        
+    </div>
+</div>
+
+
+<style>
+    .cta-panel {
+        display: flex;
+        justify-content: space-between;
+    }
+    .img-container {
+        min-height: 480px;
+    }
+</style>
+
+@code {
+    int numberOfFaces = 0;
+    string cameraImgB64;
+    string faceText;
+    VisitorRecord visitorRecord;
+    bool nextDisabled = true;
+    bool showLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        visitorRecord = visitorRegistration.GetCurrentRecord();
+        if (visitorRecord == null)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+        _camService.NewFrameAvailable += RenderNewFrame;
+        _camService.StartCapture(0, 100);
+    }
+
+    public void Dispose()
+    {
+        _camService.NewFrameAvailable -= RenderNewFrame;
+        _camService.StopCapture();
+    }
+
+    private void RenderNewFrame(object sender, FrameInfo frameInfo)
+    {
+        var frame = _camService.GetImage();
+        var imgb64 = Convert.ToBase64String(frame);
+        cameraImgB64 = "data:image/png;base64, " + imgb64;
+        numberOfFaces = _camService.GetNumberOfFaces();
+        if (numberOfFaces == 1)
+        {
+            faceText = "Ok";
+            nextDisabled = false;
+        }
+        if (numberOfFaces == 0)
+        {
+            faceText = "Unable to detect your face";
+            nextDisabled = true;
+        }
+        if (numberOfFaces > 1)
+        {
+            faceText = "Multiple faces detected";
+            nextDisabled = true;
+        }
+        base.InvokeAsync(StateHasChanged);
+    }
+
+    public void onConfirmClick()
+    {
+        var frame = _camService.CaptureImage();
+        _camService.StopCapture();
+        loadingService.ShowLoading();
+        sensetimeService.DoLogin();
+        var imageUri = sensetimeService.UploadPhoto(frame);
+        var personId = sensetimeService.AddPerson(visitorRecord, imageUri);
+        sensetimeService.AddPersonToGroup(personId);
+        NavigationManager.NavigateTo("/completed");
+    }
+}

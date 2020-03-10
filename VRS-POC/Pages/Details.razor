@@ -1,0 +1,61 @@
+﻿@page "/details"
+@using VRS_POC.Datastructs;
+@using VRS_POC.Services;
+@inject VisitorRegistration visitorRegistration
+@inject NavigationManager NavigationManager
+
+    <div class="form-container">
+        <h3>Please complete the form below</h3>
+        <div>
+            <div class="form-group">
+                <label for="inName">Name</label>
+                <input @bind="@visitor.Name" type="text" class="form-control" id="inName" aria-describedby="nameHelp" placeholder="e.g. Phua Chu Kang" />
+                <small id="emailHelp" class="form-text text-muted">Your full name in your NRIC</small>
+            </div>
+            <div class="form-group">
+                <label for="inNric">NRIC</label>
+                <input @bind="@visitor.Nric" type="text" class="form-control" id="inNric" placeholder="e.g. S1270001" />
+            </div>
+            <div class="form-group">
+                <label for="inMobile">Mobile Number</label>
+                <input @bind="@visitor.MobileNumber" type="text" class="form-control" id="inMobile" placeholder="e.g. +6588811411" />
+            </div>
+            <div class="form-group">
+                <label for="inPatientName">Patient Name</label>
+                <input @bind="@visitor.PatientName" type="text" class="form-control" id="inPatientName" placeholder="e.g. John Doe" />
+            </div>
+            <div class="form-group">
+                <label for="inFloorNumber">Floor Number</label>
+                <select @bind="visitor.FloorNumber" class="form-control">
+                    @foreach (var fn in floorNames)
+                    {
+                        <option value="@fn">@fn</option>
+                    }
+                </select>
+            </div>
+            <div class="cta-panel pad-top">
+                <button @onclick='() => NavigationManager.NavigateTo("/")' class="btn btn-secondary">Back</button>
+                <button @onclick="onSubmitClick" class="btn btn-primary">Submit</button>
+            </div>
+        </div>
+    </div>
+<style>
+    .cta-panel {
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+@code {
+    string[] floorNames = {"1", "2", "3", "3A", "5", "6", "7", "8", "9", "10", "11"};
+    VisitorRecord visitor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        visitor = new VisitorRecord();
+    }
+
+    public void onSubmitClick() {
+        visitorRegistration.SetCurrentVisitor(visitor);
+        NavigationManager.NavigateTo("/camera");
+    }
+}
