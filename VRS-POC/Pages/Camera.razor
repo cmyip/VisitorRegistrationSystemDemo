@@ -7,15 +7,17 @@
 @implements IDisposable
 @inject LoadingService loadingService
 @inject SenseTimeService sensetimeService
+@inject IJSRuntime JSRuntime;
 
 <div class="camera-container">
     <div>
         <h3>Verify the information and Take Picture</h3>
         <div class="img-container">
-            <img src="@cameraImgB64" />
+            <video onloadedmetadata="onCameraFrameReady(this)" id="inputVideo" autoplay muted playsinline></video>
+            <canvas id="boxesCanvas"></canvas>
         </div>
         <div>@faceText</div>
-        <div class="info-container">
+        @*<div class="info-container">
             <div class="row">
                 <div class="col">Name:</div>
                 <div class="col">@visitorRecord.Name</div>
@@ -36,12 +38,12 @@
                 <div class="col">Floor Number:</div>
                 <div class="col">@visitorRecord.FloorNumber</div>
             </div>
-        </div>
+        </div>*@
         <div class="cta-panel pad-top">
             <button @onclick='() => NavigationManager.NavigateTo("/details")' class="btn btn-secondary">Back</button>
             <button class="btn btn-primary" @onclick="onConfirmClick">Confirm</button>
         </div>
-        
+
     </div>
 </div>
 
@@ -51,8 +53,17 @@
         display: flex;
         justify-content: space-between;
     }
+
     .img-container {
         min-height: 480px;
+        position: relative;
+    }
+
+    #boxesCanvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        left: 0;
     }
 </style>
 
@@ -64,56 +75,136 @@
     bool nextDisabled = true;
     bool showLoading = false;
 
+
+    CameraCallbackHelper helperInstance;
+
+    // class to receive callback from javascript
+    public class CameraCallbackHelper
+    {
+        Action<int> _setFrameMetaFunc;
+        Action<string> _setB64Func;
+        public CameraCallbackHelper(Action<int> setFrameMetaFunc, Action<string> setB64Func)
+        {
+            _setFrameMetaFunc = setFrameMetaFunc;
+            _setB64Func = setB64Func;
+        }
+        [JSInvokable]
+        public void onFrameMeta(int _numberOfFaces)
+        {
+            _setFrameMetaFunc(_numberOfFaces);
+        }
+
+        [JSInvokable]
+        public void onFrameCapture(string imageBase64)
+        {
+            _setB64Func(imageBase64);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        visitorRecord = visitorRegistration.GetCurrentRecord();
+        @*visitorRecord = visitorRegistration.GetCurrentRecord();
         if (visitorRecord == null)
         {
             NavigationManager.NavigateTo("/");
-        }
-        _camService.NewFrameAvailable += RenderNewFrame;
-        _camService.StartCapture(0, 100);
-    }
+        }*@
+        @*_camService.NewFrameAvailable += RenderNewFrame;
+        _camService.StartCapture(0, 100);*@
+    helperInstance = new CameraCallbackHelper((numFaces) => OnNumberOfFacesChange(numFaces), (imageB4) => { });
+}
 
-    public void Dispose()
+private void OnNumberOfFacesChange(int numberOfFaces)
+{
+    if (numberOfFaces == 1)
     {
-        _camService.NewFrameAvailable -= RenderNewFrame;
-        _camService.StopCapture();
+        faceText = "Ok";
+        nextDisabled = false;
     }
+    if (numberOfFaces == 0)
+    {
+        faceText = "Unable to detect your face";
+        nextDisabled = true;
+    }
+    if (numberOfFaces > 1)
+    {
+        faceText = "Multiple faces detected";
+        nextDisabled = true;
+    }
+    base.InvokeAsync(StateHasChanged);
+}
 
-    private void RenderNewFrame(object sender, FrameInfo frameInfo)
-    {
-        var frame = _camService.GetImage();
-        var imgb64 = Convert.ToBase64String(frame);
-        cameraImgB64 = "data:image/png;base64, " + imgb64;
-        numberOfFaces = _camService.GetNumberOfFaces();
-        if (numberOfFaces == 1)
-        {
-            faceText = "Ok";
-            nextDisabled = false;
-        }
-        if (numberOfFaces == 0)
-        {
-            faceText = "Unable to detect your face";
-            nextDisabled = true;
-        }
-        if (numberOfFaces > 1)
-        {
-            faceText = "Multiple faces detected";
-            nextDisabled = true;
-        }
-        base.InvokeAsync(StateHasChanged);
-    }
+private void OnFrameCaptureB64(string imageb64)
+{
+    cameraImgB64 = imageb64;
+}
 
-    public void onConfirmClick()
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (firstRender)
     {
-        var frame = _camService.CaptureImage();
-        _camService.StopCapture();
-        loadingService.ShowLoading();
-        sensetimeService.DoLogin();
-        var imageUri = sensetimeService.UploadPhoto(frame);
-        var personId = sensetimeService.AddPerson(visitorRecord, imageUri);
-        sensetimeService.AddPersonToGroup(personId);
-        NavigationManager.NavigateTo("/completed");
+        await JSRuntime.InvokeAsync<string>("initSharedFaceRecognizer");
+        await JSRuntime.InvokeAsync<object>("faceRecognitionSetCallback", DotNetObjectReference.Create(helperInstance));
+        await JSRuntime.InvokeAsync<string>("faceRecognitionUi", "inputVideo");
     }
+}
+
+public void Dispose()
+{
+    var task = JSRuntime.InvokeAsync<string>("disposeFacialCameraUi");
+
+}
+
+private void RenderNewFrame(object sender, FrameInfo frameInfo)
+{
+    var frame = _camService.GetImage();
+    var imgb64 = Convert.ToBase64String(frame);
+    cameraImgB64 = "data:image/png;base64, " + imgb64;
+    numberOfFaces = _camService.GetNumberOfFaces();
+    if (numberOfFaces == 1)
+    {
+        faceText = "Ok";
+        nextDisabled = false;
+    }
+    if (numberOfFaces == 0)
+    {
+        faceText = "Unable to detect your face";
+        nextDisabled = true;
+    }
+    if (numberOfFaces > 1)
+    {
+        faceText = "Multiple faces detected";
+        nextDisabled = true;
+    }
+    base.InvokeAsync(StateHasChanged);
+}
+
+private async Task<byte[]> getFrameFromJs()
+{
+    var frameSize = await JSRuntime.InvokeAsync<int>("captureFrameForCs");
+    var frameBuffer = new byte[frameSize];
+    int currentOffset = 0;
+    int chunkSize = 8192;
+    while (currentOffset < frameSize)
+    {
+        var currentFrame = await JSRuntime.InvokeAsync<int[]>("getFrameByParts", currentOffset, chunkSize);
+        Buffer.BlockCopy(currentFrame, 0, frameBuffer, currentOffset, currentFrame.Length);
+        currentOffset += chunkSize;
+    }
+    return frameBuffer.ToArray();
+}
+
+public async Task onConfirmClick()
+{
+    // var frame = _camService.CaptureImage();
+    // _camService.StopCapture();
+    loadingService.ShowLoading();
+    var frame = await getFrameFromJs();
+    // var frame = Convert.FromBase64String(frameb64);
+    var task = JSRuntime.InvokeAsync<string>("disposeFacialCameraUi");
+    sensetimeService.DoLogin();
+    var imageUri = sensetimeService.UploadPhoto(frame);
+    var personId = sensetimeService.AddPerson(visitorRecord, imageUri);
+    sensetimeService.AddPersonToGroup(personId);
+    NavigationManager.NavigateTo("/completed");
+}
 }

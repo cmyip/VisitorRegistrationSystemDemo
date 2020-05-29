@@ -1,31 +1,40 @@
 ﻿@page "/"
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
-    <div class="welcome-logo">
-        <img class="logo-main" src="/img/ntuc_logo.png" />
-        <div class="row pad-top">
-            <div class="col">
-                <h2>Visitor Registration</h2>
-            </div>
-        </div>
-        <div class="disclaimers">
-            <h3>Disclaimer:</h3>
-            <p></p>
-        </div>
-        <div class="cta-panel pad-top">
-            <button class="btn btn-primary" @onclick='() => NavigationManager.NavigateTo("/details")'>Agree</button>
+<div class="welcome-logo">
+    <img class="logo-main" src="/img/ntuc_logo.png" />
+    <div class="row pad-top">
+        <div class="col">
+            <h2>Visitor Registration</h2>
         </div>
     </div>
+    <div class="disclaimers">
+        <h3>Disclaimer:</h3>
+        <p></p>
+    </div>
+    <div class="cta-panel pad-top">
+        <button class="btn btn-primary" @onclick='() => NavigationManager.NavigateTo("/details")'>Agree</button>
+    </div>
+</div>
 <style>
     .logo-main {
         height: 150px;
     }
+
     .cta-panel {
         display: flex;
         justify-content: flex-end;
     }
+
     .pad-top {
         padding-top: 1em;
     }
 </style>
 
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JSRuntime.InvokeAsync<string>("initSharedFaceRecognizer");
+    }
+}

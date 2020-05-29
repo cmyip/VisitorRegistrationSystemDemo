@@ -26,13 +26,14 @@ namespace VRS_POC.Services
 
         public void SensetimeLogin(string username, string password)
         {
-            // Redacted to honor non-disclosure agreement
             var hostname = _sensetimeConfig.Value.Hostname;
             var client = new RestClient(hostname);
-            var request = new RestRequest("<redacted>", Method.POST);
+            var request = new RestRequest("/GUNS/mgr/login", Method.POST);
             var requestBody = new Dictionary<string, string>()
             {
-                
+                { "username", username },
+                { "password", password },
+                { "accountType", "2" }
             };
             var jsonString = JsonConvert.SerializeObject(requestBody);
             request.AddParameter("application/json; charset=utf-8", jsonString, ParameterType.RequestBody);
@@ -54,15 +55,30 @@ namespace VRS_POC.Services
 
         public string AddPerson(VisitorRecord record, string imageUri)
         {
-            // Redacted to honor non-disclosure agreement
             var hostname = _sensetimeConfig.Value.Hostname;
             var client = new RestClient(hostname);
-            var request = new RestRequest("<redacted>", Method.POST);
+            var request = new RestRequest("/PERSON/person/create", Method.POST);
             request.AddHeader("Content-Type", "application/json;charset=UTF-8");
             request.AddHeader("Authorization", "Basic " + _authToken);
+            // {"birthday":"","cnName":"Daniel","enName":"","idNumber":"888811111","documentId":"","imageURI":"/images/person/20200226/255/6a656596470320f1e78887eb0c4e0322.jpg",
+            // "operatePerson":"admin","sex":"","personType":"","personTag":"","desc":"","idType":"","idCountry":"","idExpiryDate":"","privilege":""}
             var requestBody = new Dictionary<string, object>()
             {
-                
+                { "birthday", "" },
+                { "cnName", record.Name },
+                { "enName", "" },
+                { "idNumber", record.Nric },
+                { "documentId", "" },
+                { "imageURI", imageUri },
+                { "operatePerson", "VRS Kiosk" },
+                { "sex", "" },
+                { "personType", "" },
+                { "personTag", "" },
+                { "desc", String.Format("Floor Number:{0}\nPatient Name:{1}\nMobile Number:{2}", record.FloorNumber, record.PatientName, record.MobileNumber ) },
+                { "idType", "" },
+                { "idCountry", "" },
+                { "idExpiryDate", "" },
+                { "privilege", "" }
             };
             var jsonString = JsonConvert.SerializeObject(requestBody);
             request.AddParameter("application/json; charset=utf-8", jsonString, ParameterType.RequestBody);
@@ -86,15 +102,19 @@ namespace VRS_POC.Services
 
         public bool AddPersonToGroup(string personId)
         {
-            // Redacted to honor non-disclosure agreement
             var hostname = _sensetimeConfig.Value.Hostname;
             var client = new RestClient(hostname);
-            var request = new RestRequest("<redacted>", Method.POST);
+            var request = new RestRequest("/PERSON/member/addMemberToGroups", Method.POST);
             request.AddHeader("Content-Type", "application/json;charset=UTF-8");
             request.AddHeader("Authorization", "Basic " + _authToken);
             object requestBody = new
             {
-
+                groupIdList = new List<string>()
+                {
+                    "2"
+                },
+                operatePerson = "admin",
+                uid = personId
             };
             var jsonString = JsonConvert.SerializeObject(requestBody);
             request.AddParameter("application/json; charset=utf-8", jsonString, ParameterType.RequestBody);
@@ -115,14 +135,14 @@ namespace VRS_POC.Services
 
         public string UploadPhoto(byte[] image)
         {
-            // Redacted to honor non-disclosure agreement
             var hostname = _sensetimeConfig.Value.Hostname;
             var client = new RestClient(hostname);
-            var request = new RestRequest("<redacted>", Method.POST);
+            var request = new RestRequest("/UTILITY/files/uploadImage", Method.POST);
             request.AddHeader("Content-Type", "multipart/form-data");
             request.AddHeader("Authorization", "Basic " + _authToken);
             Guid g = Guid.NewGuid();
             request.AddFile("image", image, g.ToString() + ".png");
+            request.AddParameter("serviceType", "person");
             try
             {
                 var result = client.Execute(request);
@@ -139,6 +159,13 @@ namespace VRS_POC.Services
                 throw (e);
             }
             return "";
+        }
+
+        public void AddPersonSensetime()
+        {
+            var hostname = _sensetimeConfig.Value.Hostname;
+            var endpoint = hostname + "/PERSONS/create";
+            var client = new RestClient(hostname);
         }
     }
 }
